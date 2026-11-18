@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Relic Hunt</title>
+<meta name="description" content="A daily history quiz where the most obscure correct answer wins.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%232c7a6b'/%3E%3Cpath d='M16 6l8 10-8 10-8-10z' fill='%23d9ad57'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a single museum display case. One catalogue card at a time, with the accession number, date range and an obscurity gauge printed on it. */
+:root {
+  --bg: #e6eae8; --case: #f7f9f8; --ink: #17232b; --muted: #5b6a70; --line: #c9d1cf;
+  --verdigris: #2c7a6b; --verdigris-soft: #d5ebe5; --brass: #a37a2c; --brass-soft: #f2e7cf;
+  --miss: #b0413a; --miss-soft: #f5dcd9; --on-accent: #ffffff;
+  --display: "Fraunces", Georgia, "Times New Roman", serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #11171a; --case: #1a2226; --ink: #e4ebe8; --muted: #94a3a6; --line: #2e3a3f;
+  --verdigris: #5cbfa9; --verdigris-soft: #1c3a34; --brass: #d9ad57; --brass-soft: #3a2f18;
+  --miss: #e2766d; --miss-soft: #3d201e; --on-accent: #0f1a17; color-scheme: dark } }
+* { box-sizing: border-box }
+html { -webkit-text-size-adjust: 100% }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body); }
+.wrap { max-width: 560px; margin: 0 auto; padding-block: max(20px, env(safe-area-inset-top, 0px)) 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 18px; }
+header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap }
+h1 { font: 700 30px/1 var(--display); letter-spacing: -0.01em; margin: 0 }
+h1 span { color: var(--verdigris) }
+.stamp { font: 500 12px/1 var(--mono); color: var(--muted); letter-spacing: .06em; text-transform: uppercase }
+.card { background: var(--case); border: 1px solid var(--line); border-radius: 6px; padding: 20px; display: flex; flex-direction: column; gap: 14px;
+  box-shadow: 0 1px 0 var(--line), 0 10px 30px -18px rgba(0,0,0,.35) }
+.acc { display: flex; justify-content: space-between; gap: 10px; font: 500 12px/1.2 var(--mono); color: var(--muted); letter-spacing: .05em; text-transform: uppercase }
+.acc b { color: var(--verdigris); font-weight: 500 }
+h2 { font: 500 23px/1.25 var(--display); margin: 0; text-wrap: balance }
+p { margin: 0 }
+.muted { color: var(--muted) } .small { font-size: 13px } .err { color: var(--miss) }
+.lives { display: flex; gap: 6px; align-items: center; font: 12px var(--mono); color: var(--muted) }
+.lives i { width: 10px; height: 10px; border-radius: 50%; background: var(--verdigris); display: inline-block }
+.lives i.gone { background: transparent; border: 1.5px solid var(--line) }
+form.guess { display: flex; gap: 8px }
+input[type=text] { flex: 1; min-width: 0; font: 16px var(--body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 11px 12px }
+input[type=text]:focus-visible { outline: 2px solid var(--verdigris); outline-offset: 1px }
+label.field { display: flex; flex-direction: column; gap: 6px; font: 500 12px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .05em }
+button { font: 600 15px var(--body); border-radius: 4px; border: 1px solid transparent; padding: 11px 16px; cursor: pointer; color: var(--on-accent); background: var(--verdigris) }
+button.ghost { background: transparent; color: var(--ink); border-color: var(--line) }
+button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px }
+button:disabled { opacity: .5; cursor: default }
+.row { display: flex; gap: 8px; flex-wrap: wrap }
+.flash { font-size: 14px; min-height: 21px }
+.flash.miss { color: var(--miss) } .flash.vague { color: var(--brass) }
+.misses { display: flex; flex-wrap: wrap; gap: 6px }
+.misses span { font-size: 13px; background: var(--miss-soft); color: var(--miss); padding: 2px 8px; border-radius: 3px; text-decoration: line-through }
+.verdict { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: end; padding: 14px; border-radius: 4px; background: var(--verdigris-soft) }
+.verdict.relic { background: var(--brass-soft) } .verdict.zero { background: var(--miss-soft) }
+.verdict .pts { font: 700 40px/1 var(--display); grid-row: span 2; font-variant-numeric: tabular-nums }
+.verdict.relic .pts { color: var(--brass) }
+.tier { font: 500 11px/1 var(--mono); letter-spacing: .1em; text-transform: uppercase }
+.ledger { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column }
+.ledger li { display: grid; grid-template-columns: minmax(0,1fr) 92px 34px; gap: 10px; align-items: center; padding: 6px 0; border-top: 1px solid var(--line); font-size: 14px }
+.ledger li.mine { font-weight: 600 }
+.ledger li.mine .nm::after { content: "  \2190 you"; color: var(--verdigris); font-weight: 500; font-size: 12px }
+.ledger .nm { min-width: 0; overflow-wrap: anywhere }
+.ledger .crowd { display: block; font: 11px var(--mono); color: var(--muted); font-weight: 400 }
+.gauge { height: 6px; background: var(--line); border-radius: 3px; overflow: hidden }
+.gauge > div { height: 100%; background: var(--verdigris) } .gauge > div.hi { background: var(--brass) }
+.ledger .n { font: 500 13px var(--mono); text-align: right; font-variant-numeric: tabular-nums }
+.ledger-scroll { max-height: 320px; overflow-y: auto }
+.progress { display: flex; gap: 4px }
+.progress span { flex: 1; height: 4px; border-radius: 2px; background: var(--line) }
+.progress span.done { background: var(--verdigris) } .progress span.now { background: var(--ink) }
+.board { list-style: none; margin: 0; padding: 0 }
+.board li { display: grid; grid-template-columns: 36px minmax(0,1fr) auto; gap: 10px; align-items: center; padding: 7px 0; border-top: 1px solid var(--line) }
+.board li.me { font-weight: 600 }
+.board .rk { font: 500 13px var(--mono); color: var(--muted) }
+.board .sc { font: 500 14px var(--mono); font-variant-numeric: tabular-nums }
+.board .who { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.howto { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; font-size: 14px; margin: 0 }
+.howto dt { font: 500 12px/1.6 var(--mono); color: var(--brass); text-transform: uppercase; letter-spacing: .05em }
+.howto dd { margin: 0 }
+.summary { display: flex; flex-direction: column; gap: 4px }
+.summary div { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; border-top: 1px solid var(--line); padding-top: 4px }
+.summary b { font: 500 14px var(--mono) }
+.big { font: 700 52px/1 var(--display); font-variant-numeric: tabular-nums }
+@media (prefers-reduced-motion: no-preference) { .verdict { animation: pop .35s ease-out } @keyframes pop { from { transform: scale(.97); opacity: .4 } to { transform: none; opacity: 1 } } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Relic <span>Hunt</span></h1>
+    <div class="stamp" id="dateStamp"></div>
+  </header>
+  <main id="app"><section class="card"><p class="muted">Opening today's case…</p></section></main>
+  <section class="card" id="boardCard">
+    <div class="acc"><span>Today's leaderboard</span><b id="boardCount"></b></div>
+    <ol class="board" id="board"></ol>
+    <p class="muted small" id="boardNote">Loading scores…</p>
+    <div class="row"><button class="ghost" id="refreshBoard" type="button">Refresh</button></div>
+  </section>
+</div>
+
+<script>
+/* ---------- Backend (Supabase, history tables) ---------- */
+const SUPABASE_URL = "https://jyyzhvyblfpovyxzsqgi.supabase.co";
+const SUPABASE_KEY = "sb_publishable_cKLNSIwyWlMJ1t3iAhu4IQ_ixoxQHij";
+async function rpc(fn, args) {
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", apikey: SUPABASE_KEY },
+    body: JSON.stringify(args || {})
+  });
+  if (!res.ok) throw new Error("The server didn't answer (" + res.status + "). Check your connection and try again.");
+  return res.json();
+}
+
+/* ---------- Turning a guess into a match key (same rules as the server's stored keys) ---------- */
+const ROMAN = {i:"1",ii:"2",iii:"3",iv:"4",v:"5",vi:"6",vii:"7",viii:"8",ix:"9",x:"10",xi:"11"};
+const ORD = {first:"1",second:"2",third:"3",fourth:"4",fifth:"5",sixth:"6",seventh:"7",eighth:"8",ninth:"9",tenth:"10"};
+const STOP = new Set(["the","of","at","and","king","queen","emperor","president","tsar","sir","saint","beach"]);
+function norm(s) {
+  s = String(s || "").toLowerCase().replace(/ø/g,"o").replace(/æ/g,"ae").replace(/ß/g,"ss").replace(/å/g,"a")
+      .normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return s.split(/[^a-z0-9]+/).filter(Boolean)
+    .map(t => ROMAN[t] || ORD[t] || t.replace(/^(\d+)(st|nd|rd|th)$/, "$1"))
+    .filter(t => !STOP.has(t)).join("").slice(0, 80);
+}
+const tierOf = p => p >= 80 ? "Relic" : p >= 50 ? "Rare find" : p >= 25 ? "Known" : "Common";
+const LIVES = 3;
+
+/* ---------- Identity on this device ---------- */
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; } }
+let token = store("relic.token");
+if (!token || token.length < 16) {
+  const b = new Uint8Array(16); crypto.getRandomValues(b);
+  token = Array.from(b, x => x.toString(16).padStart(2, "0")).join("");
+  store("relic.token", token);
+}
+let username = store("relic.name") || "";
+
+/* ---------- State ---------- */
+const state = { screen: "intro", mode: "daily", qs: [], i: 0, lives: LIVES, misses: [], flash: null, busy: false,
+                last: null, results: [], error: "", date: null };
+const app = document.getElementById("app");
+const esc = s => String(s == null ? "" : s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const total = () => state.results.reduce((a, r) => a + (r.points || 0), 0);
+
+function setDate(d) {
+  state.date = d;
+  document.getElementById("dateStamp").textContent =
+    new Date(d + "T12:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" }) + " · Daily";
+}
+setDate(new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Copenhagen" }).format(new Date()));
+
+async function startDaily() {
+  const name = (document.getElementById("nameInput").value || "").trim().replace(/\s+/g, " ");
+  if (name.length < 2 || name.length > 20) { state.error = "Pick a name between 2 and 20 characters."; render(); return; }
+  state.busy = true; state.error = ""; render();
+  try {
+    const r = await rpc("hist_start", { p_username: name, p_token: token });
+    state.busy = false;
+    if (r.status !== "ok") { state.error = r.message; render(); return; }
+    username = r.username; store("relic.name", username); setDate(r.date);
+    state.mode = "daily"; state.qs = r.questions;
+    state.results = r.questions.filter(q => q.done).map(q => ({ q, points: q.points, answer: q.answer, reveal: q.reveal }));
+    state.i = r.questions.findIndex(q => !q.done);
+    if (state.i < 0) { state.screen = "done"; render(); loadBoard(); return; }
+    beginQuestion(LIVES - (r.questions[state.i].tries_used || 0));
+  } catch (e) { state.busy = false; state.error = e.message; render(); }
+}
+async function startPractice() {
+  state.busy = true; state.error = ""; render();
+  try {
+    const qs = await rpc("hist_practice_questions");
+    state.busy = false; state.mode = "practice"; state.qs = qs; state.results = []; state.i = 0;
+    beginQuestion(LIVES);
+  } catch (e) { state.busy = false; state.error = e.message; render(); }
+}
+function beginQuestion(lives) {
+  state.lives = lives; state.misses = []; state.flash = null; state.screen = "play"; render();
+  const inp = document.getElementById("guessInput"); if (inp) inp.focus();
+}
+function nextQuestion() {
+  state.i++;
+  if (state.i >= state.qs.length) { state.screen = "done"; render(); if (state.mode === "daily") loadBoard(); return; }
+  beginQuestion(LIVES);
+}
+function finishQuestion(points, answer, answerId, reveal) {
+  const q = state.qs[state.i];
+  state.last = { q, points, answer, answerId, reveal, misses: state.misses.slice() };
+  state.results.push({ q, points, answer, reveal });
+  state.screen = "reveal"; state.busy = false; render();
+}
+
+async function submitGuess(raw) {
+  const q = state.qs[state.i], key = raw === null ? null : norm(raw);
+  if (raw !== null && !key) return;
+  state.busy = true; render();
+  try {
+    if (state.mode === "daily") {
+      const r = await rpc("hist_guess", { p_username: username, p_token: token, p_question_id: q.id, p_key: key });
+      state.busy = false;
+      if (r.status === "error") { state.flash = { cls: "miss", t: r.message }; render(); return; }
+      if (r.status === "vague") { state.flash = { cls: "vague", t: `"${raw}" could be more than one answer. Be more specific.` }; }
+      else if (r.status === "repeat") { state.flash = { cls: "vague", t: "You already tried that one." }; }
+      else if (r.status === "miss") { state.misses.push(raw); state.lives = r.tries_left;
+        state.flash = { cls: "miss", t: `"${raw}" isn't on the list. ${r.tries_left} ${r.tries_left === 1 ? "try" : "tries"} left.` }; }
+      else { if (r.status === "out") state.misses.push(raw); finishQuestion(r.points, r.answer, r.answer_id, r.reveal); return; }
+    } else {
+      if (raw === null) { const rev = await rpc("hist_practice_reveal", { p_question_id: q.id }); finishQuestion(0, null, null, rev); return; }
+      const r = await rpc("hist_practice_guess", { p_question_id: q.id, p_key: key });
+      state.busy = false;
+      if (r.status === "hit") { const rev = await rpc("hist_practice_reveal", { p_question_id: q.id }); finishQuestion(r.points, r.answer, r.answer_id, rev); return; }
+      if (r.status === "vague") state.flash = { cls: "vague", t: `"${raw}" could be more than one answer. Be more specific.` };
+      else if (r.status === "error") state.flash = { cls: "miss", t: r.message };
+      else if (state.misses.some(m => norm(m) === key)) state.flash = { cls: "vague", t: "You already tried that one." };
+      else {
+        state.misses.push(raw); state.lives--;
+        if (state.lives <= 0) { const rev = await rpc("hist_practice_reveal", { p_question_id: q.id }); finishQuestion(0, null, null, rev); return; }
+        state.flash = { cls: "miss", t: `"${raw}" isn't on the list. ${state.lives} ${state.lives === 1 ? "try" : "tries"} left.` };
+      }
+    }
+  } catch (e) { state.busy = false; state.flash = { cls: "miss", t: e.message }; }
+  render();
+  const inp = document.getElementById("guessInput"); if (inp) { inp.value = ""; inp.focus(); }
+}
+
+/* ---------- Leaderboard ---------- */
+async function loadBoard() {
+  const note = document.getElementById("boardNote"), ol = document.getElementById("board");
+  try {
+    const lb = await rpc("hist_leaderboard");
+    const list = lb.entries || [];
+    document.getElementById("boardCount").textContent = list.length ? list.length + (list.length === 1 ? " player" : " players") : "";
+    ol.replaceChildren(...list.map(e => {
+      const li = document.createElement("li");
+      if (username && e.username.toLowerCase() === username.toLowerCase()) li.className = "me";
+      const rk = document.createElement("span"); rk.className = "rk"; rk.textContent = "#" + e.rank;
+      const who = document.createElement("span"); who.className = "who"; who.textContent = e.username;
+      const sc = document.createElement("span"); sc.className = "sc"; sc.textContent = e.score;
+      li.append(rk, who, sc); return li;
+    }));
+    note.textContent = list.length ? "" : "No finished runs yet today. Be the first.";
+    note.hidden = !!list.length;
+  } catch (e) { note.hidden = false; note.textContent = "Scores can't be reached right now."; }
+}
+document.getElementById("refreshBoard").onclick = loadBoard;
+
+/* ---------- Rendering ---------- */
+function progress() { return `<div class="progress">${state.qs.map((_, i) => `<span class="${i < state.results.length ? "done" : i === state.i ? "now" : ""}"></span>`).join("")}</div>`; }
+function acc(q) { return `<div class="acc"><span>Inv. ${String(q.id).padStart(3, "0")} · ${state.i + 1} of ${state.qs.length}</span><b>${esc(q.era)}</b></div>`; }
+function ledger(rev, answerId) {
+  const crowd = state.mode === "daily" && rev.answered > 0;
+  return `<div class="ledger-scroll"><ul class="ledger">${rev.answers.map(a => {
+    const c = crowd ? `<span class="crowd">${a.picks} of ${rev.answered} today</span>` : "";
+    return `<li class="${a.id === answerId ? "mine" : ""}"><span class="nm">${esc(a.name)}${c}</span><span class="gauge" aria-hidden="true"><div class="${a.points >= 80 ? "hi" : ""}" style="width:${a.points}%"></div></span><span class="n">${a.points}</span></li>`;
+  }).join("")}</ul></div>`;
+}
+function render() {
+  const s = state.screen;
+  if (s === "intro") {
+    app.innerHTML = `<section class="card">
+      <div class="acc"><span>Today's case</span><b>5 questions</b></div>
+      <h2>Name the answer nobody else thinks of.</h2>
+      <p class="muted">Each question has a fixed list of correct answers. Obvious answers score little. Obscure ones score up to 100.</p>
+      <dl class="howto">
+        <dt>Common</dt><dd>Lincoln, Nero, the Great Pyramid: 5–20 points</dd>
+        <dt>Relic</dt><dd>80+ points for the deep cuts, like Chester A. Arthur</dd>
+        <dt>Tries</dt><dd>${LIVES} guesses per question. A wrong answer costs one; a vague one is free.</dd>
+      </dl>
+      <form id="startForm" class="row" style="flex-direction:column;align-items:stretch">
+        <label class="field" for="nameInput">Your name on the leaderboard
+          <input type="text" id="nameInput" maxlength="20" autocomplete="nickname" value="${esc(username)}" placeholder="e.g. Isak">
+        </label>
+        <div class="row">
+          <button id="startDaily" ${state.busy ? "disabled" : ""}>Start today's hunt</button>
+          <button class="ghost" type="button" id="startPractice" ${state.busy ? "disabled" : ""}>Practice round</button>
+        </div>
+      </form>
+      ${state.error ? `<p class="small err" role="alert">${esc(state.error)}</p>` : ""}
+      <p class="small muted">One daily run per name. Your name is kept on this device, so you can come back and finish later.</p>
+    </section>`;
+    document.getElementById("startForm").onsubmit = e => { e.preventDefault(); startDaily(); };
+    document.getElementById("startPractice").onclick = startPractice;
+    return;
+  }
+  if (s === "play") {
+    const q = state.qs[state.i];
+    app.innerHTML = `<section class="card">
+      ${progress()}${acc(q)}
+      <h2>${esc(q.prompt)}</h2>
+      <div class="lives" aria-label="${state.lives} tries left">${Array.from({ length: LIVES }, (_, i) => `<i class="${i < state.lives ? "" : "gone"}"></i>`).join("")}<span>${state.mode === "practice" ? "Practice" : "Daily"} · ${q.answer_count} correct answers</span></div>
+      <form class="guess" id="guessForm" autocomplete="off"><input type="text" id="guessInput" placeholder="Type an answer" aria-label="Your answer" enterkeyhint="go" autocapitalize="words"><button ${state.busy ? "disabled" : ""}>Guess</button></form>
+      <p class="flash ${state.flash ? state.flash.cls : ""}" role="status">${state.flash ? esc(state.flash.t) : ""}</p>
+      ${state.misses.length ? `<div class="misses">${state.misses.map(m => `<span>${esc(m)}</span>`).join("")}</div>` : ""}
+      <div class="row"><button class="ghost" id="giveUp" ${state.busy ? "disabled" : ""}>Skip question</button></div>
+    </section>`;
+    document.getElementById("guessForm").onsubmit = e => { e.preventDefault(); if (!state.busy) submitGuess(document.getElementById("guessInput").value.trim()); };
+    document.getElementById("giveUp").onclick = () => { if (!state.busy) submitGuess(null); };
+    return;
+  }
+  if (s === "reveal") {
+    const L = state.last, q = L.q, hit = L.answer != null;
+    const cls = !hit ? "zero" : L.points >= 80 ? "relic" : "";
+    const lastQ = state.i >= state.qs.length - 1;
+    app.innerHTML = `<section class="card">
+      ${progress()}${acc(q)}
+      <h2>${esc(q.prompt)}</h2>
+      <div class="verdict ${cls}">
+        <span class="tier">${hit ? tierOf(L.points) : "No points"}</span><span class="pts">${L.points || 0}</span>
+        <strong>${hit ? esc(L.answer) : "No answer"}</strong>
+      </div>
+      <p class="small muted">All ${L.reveal.answers.length} correct answers, most obscure first:</p>
+      ${ledger(L.reveal, L.answerId)}
+      <div class="row"><button id="nextBtn">${lastQ ? "See your total" : "Next question"}</button></div>
+    </section>`;
+    document.getElementById("nextBtn").onclick = nextQuestion;
+    document.getElementById("nextBtn").focus();
+    return;
+  }
+  if (s === "done") {
+    const t = total(), relics = state.results.filter(r => r.points >= 80).length, daily = state.mode === "daily";
+    const share = `Relic Hunt ${state.date}: ${t}/500\n` + state.results.map(r => r.points >= 80 ? "◆" : r.points >= 50 ? "◈" : r.points > 0 ? "◇" : "·").join(" ") + "\n" + location.href.split("#")[0];
+    app.innerHTML = `<section class="card">
+      <div class="acc"><span>${daily ? "Today's haul" : "Practice haul"}</span><b>${relics} relic${relics === 1 ? "" : "s"}</b></div>
+      <div class="big">${t}<span class="muted" style="font-size:20px"> / 500</span></div>
+      <div class="summary">${state.results.map(r => `<div><span>${esc(r.q.prompt.replace(/^Name (a|an|one of the|someone who has)\s*/i, "").replace(/^./, c => c.toUpperCase()))}<br><span class="muted small">${r.answer ? esc(r.answer) : "No answer"}</span></span><b>${r.points || 0}</b></div>`).join("")}</div>
+      <div class="row">
+        <button id="copyBtn">Copy result</button>
+        <button class="ghost" id="practiceBtn">${daily ? "Practice round" : "Another practice round"}</button>
+        <button class="ghost" id="homeBtn">Back to start</button>
+      </div>
+      <p class="small muted" id="copyNote">${daily ? "Your score is on today's leaderboard. A new case opens at midnight (Copenhagen time)." : "Practice runs aren't saved."}</p>
+    </section>`;
+    document.getElementById("copyBtn").onclick = () => {
+      const note = document.getElementById("copyNote");
+      (navigator.clipboard ? navigator.clipboard.writeText(share) : Promise.reject())
+        .then(() => { note.textContent = "Copied. Paste it to your friends."; }, () => { note.textContent = share; });
+    };
+    document.getElementById("practiceBtn").onclick = startPractice;
+    document.getElementById("homeBtn").onclick = () => { state.screen = "intro"; state.error = ""; render(); };
+  }
+}
+render();
+loadBoard();
+</script>
+</body>
+</html>
